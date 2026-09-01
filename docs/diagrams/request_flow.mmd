@@ -1,0 +1,24 @@
+%% Ask request sequence
+%% Render: https://mermaid.live
+
+sequenceDiagram
+  autonumber
+  participant User
+  participant UI as Web UI
+  participant API as FastAPI
+  participant SVC as AgentService
+  participant LG as LangGraph
+  participant VS as FAISS
+  participant LLM as OpenAI
+
+  User->>UI: Question
+  UI->>API: POST /api/v1/ask
+  API->>SVC: ask()
+  SVC->>LG: invoke graph
+  LG->>VS: hybrid retrieve
+  VS-->>LG: chunks
+  LG->>LLM: writer + critic
+  LG-->>SVC: answer + citations
+  SVC-->>API: response
+  API-->>UI: JSON / SSE
+  UI-->>User: answer with [N] citations

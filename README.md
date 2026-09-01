@@ -253,6 +253,8 @@ Key environment variables (see `.env.example` for the full list):
 
 ## Architecture
 
+Full system design with diagrams: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
+
 ```
 User → Web UI (/app/) → FastAPI → AgentService → LangGraph
                                               ↓
@@ -263,7 +265,7 @@ User → Web UI (/app/) → FastAPI → AgentService → LangGraph
                                          FAISS (per project)
 ```
 
-Detailed diagrams and interview talking points: [`docs/interview_guide.md`](docs/interview_guide.md)
+Interview talking points: [docs/interview_guide.md](docs/interview_guide.md)
 
 ---
 

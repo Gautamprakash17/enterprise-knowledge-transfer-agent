@@ -1,0 +1,23 @@
+%% LangGraph multi-agent workflow
+%% Render: https://mermaid.live
+
+flowchart TD
+  START([User question]) --> GRD[guardrails]
+  GRD --> SM[shared_memory load]
+  SM --> SUP[supervisor]
+
+  SUP -->|retrieve| RET[retriever]
+  SUP -->|write| WRI[writer]
+  SUP -->|critique| CRI[critic]
+  SUP -->|finish| MEM[memory]
+
+  RET --> SUP
+  WRI --> SUP
+  CRI --> SUP
+
+  MEM --> CONF[confidence]
+  CONF --> OGRD[output_guardrails]
+  OGRD --> SAVE[shared_memory_save]
+  SAVE --> END([Response])
+
+  RET --> FAISS[(FAISS)]

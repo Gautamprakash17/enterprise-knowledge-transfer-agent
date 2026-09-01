@@ -1,0 +1,12 @@
+%% Ingestion pipeline
+%% Render: https://mermaid.live
+
+flowchart LR
+  SRC[Sources\nfiles · folders · Git · Confluence]
+  LOAD[document_loader]
+  CHK[chunking\nRecursiveCharacterTextSplitter]
+  EMB[OpenAI embeddings]
+  IDX[FAISS index]
+  MAN[ingestion_manifest.json]
+
+  SRC --> LOAD --> CHK --> EMB --> IDX --> MAN

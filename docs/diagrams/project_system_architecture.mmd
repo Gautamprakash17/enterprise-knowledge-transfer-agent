@@ -23,13 +23,13 @@ flowchart TB
     M --> R4
   end
 
-  subgraph Core["Core runtime"]
-    SVC["AgentService\nknowledge_transfer_agent.services.agent_service"]
-    G["LangGraph graph\nknowledge_transfer_agent.agent.graph"]
-    N["Nodes: planner → tool_select → retrieve →\ngenerate → reflection → memory → confidence\nknowledge_transfer_agent.agent.nodes"]
-    RET["Retrieval\nHybridRetriever + FAISS\nretrieval/* + vector_store.py"]
-    EMB["Embeddings\nOpenAI (langchain-openai)"]
-    CACHE["Caches\nretrieve cache + LLM invoke_cached\n(core/cache.py)"]
+  subgraph Core["Agent runtime"]
+    SVC["AgentService\nservices/agent_service.py"]
+    G["LangGraph multi-agent\nagent/graph.py"]
+    N["guardrails → supervisor →\nretriever · writer · critic →\nconfidence · memory"]
+    RET["HybridRetriever + FAISS\nretrieval/*"]
+    EMB["OpenAI embeddings"]
+    CACHE["Caches\ncore/cache.py"]
     SVC --> G --> N
     N --> RET
     RET --> EMB
