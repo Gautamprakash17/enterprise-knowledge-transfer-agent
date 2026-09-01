@@ -1,0 +1,431 @@
+🔹 Spark / PySpark
+1️⃣ What is a Spark Cluster?
+A Spark cluster is a distributed computing environment where multiple machines process data in parallel. It consists of a Driver node that coordinates execution and multiple Executors running on worker nodes that process data partitions.
+
+2️⃣ Driver vs Executor?
+Driver: Creates Spark session, builds execution plan (DAG), coordinates tasks.
+
+
+Executor: Executes tasks, processes partitions, stores data in memory.
+
+
+Driver = coordinator. Executors = workers.
+
+3️⃣ Driver OOM vs Executor OOM?
+Driver OOM: Seen in driver logs. Usually caused by collect() or large broadcast.
+
+
+Executor OOM: Multiple task failures, executor lost errors. Caused by skew, large partitions, heavy joins.
+
+
+Check CloudWatch logs / Spark UI to confirm.
+
+4️⃣ What is Checkpointing?
+Checkpointing is basically saving the intermediate result of a Spark job to a safe location like S3.
+In Spark, when we apply many transformations, Spark keeps track of all steps in something called lineage. If the job fails, Spark recomputes everything from the beginning.
+So by using checkpointing, we save the data at a certain point.
+ If something fails later, Spark does not need to recompute from the very start — it resumes from the checkpoint.
+It improves:
+Fault tolerance
+
+
+Stability of long-running jobs
+
+
+Performance in complex pipelines
+
+
+
+
+5️⃣ How did you implement checkpointing?
+In our project, we used checkpointing in long transformation pipelines where multiple joins and aggregations were involved.
+We stored checkpoint data in S3 to ensure durability.
+This helped us avoid recomputation and improved reliability of monthly batch jobs.
+
+6️⃣ repartition() vs coalesce()
+repartition() → Full shuffle, can increase/decrease partitions.
+
+
+coalesce() → No full shuffle, only reduces partitions, faster.
+
+
+Use coalesce when reducing output files.6. repartition() vs. coalesce()
+Feature
+repartition()
+coalesce()
+Shuffle
+Full shuffle
+No full shuffle (narrow transformation)
+Partition Count
+Can increase or decrease partitions
+Only reduces the number of partitions
+Performance
+Slower (due to full shuffle)
+Faster (due to lack of full shuffle)
+Use Case
+Use when needing to significantly change or increase partition count.
+Recommended for reducing the number of output files (partitions).
+
+
+
+7️⃣ What is Sort Merge Join?
+Used when both datasets are large. Spark shuffles and sorts both datasets on join key and then merges them efficiently.
+
+8️⃣ Broadcast vs Sort Merge Join?
+Broadcast Join → One table small, no shuffle on big table.
+
+
+Sort Merge Join → Both tables large, requires shuffle.
+
+
+
+9️⃣ If both datasets are very large?
+Use Sort Merge Join.
+ Repartition on join key and handle skew if required.
+
+🔟 DataFrame vs DynamicFrame?
+DataFrame → Strict schema, better performance.
+
+
+DynamicFrame → Flexible schema, handles semi-structured data and schema evolution.
+
+
+
+1️⃣1️⃣ What is Glue Bookmark?
+Glue Bookmark tracks processed files/timestamps to support incremental loading.
+
+1️⃣2️⃣ How does Bookmark prevent duplicate processing?
+Glue stores metadata of processed files. On next run, it skips previously processed data.
+
+
+
+
+1️⃣3️⃣ How do you handle OOM?
+Yes, I faced an executor out-of-memory issue during our monthly telemetry processing, where we were handling around 50–100 GB of fleet data in Glue using PySpark.
+ The job was failing during a heavy join and aggregation stage.
+Pause slightly.
+First, I checked CloudWatch logs and Spark UI to understand where the failure was happening. I noticed that one stage had very large shuffle size and some tasks were taking significantly longer, which indicated data skew.
+Then continue:
+To fix it, I applied a few optimizations:
+Increased the number of partitions to reduce data size per executor
+
+
+Repartitioned the data on a better join key to balance distribution
+
+
+Used broadcast join where applicable
+
+
+Upgraded the Glue worker type from G.1X to G.2X for heavy monthly loads
+
+
+Then close with impact:
+After these changes, the job completed successfully within SLA, and memory utilization became stable.
+
+
+13.1What is Data Skew? (Simple Human Explanation)
+Data skew happens when:
+👉 Some partitions have much more data than others.
+In distributed processing (like Spark), data is divided into partitions and processed in parallel.
+If one partition has 10x more data than others:
+That executor will take much longer
+
+
+Other executors will sit idle
+
+
+Job becomes slow
+
+
+Sometimes causes OOM
+
+
+That is called data skew.
+
+
+
+
+🔹 AWS / Glue
+
+1️⃣4️⃣ CloudWatch vs CloudTrail?
+CloudWatch → Logs & monitoring 
+
+
+CloudTrail → API activity tracking (who did what, when- example who deleted and created what services and when).
+
+
+
+1️⃣5️⃣ How do you monitor Glue jobs?
+CloudWatch logs
+
+
+Glue job run history
+
+
+Set alarms for failures
+
+
+Spark UI for performance analysis
+
+
+
+1️⃣6️⃣ How do you handle duplicate files?
+We maintain a metadata table storing filename + checksum.
+ Lambda checks before triggering Glue.
+We maintain a metadata table in Snowflake where we store filename, checksum, processing timestamp, and status. Before triggering the Glue job, Lambda checks this table to avoid duplicate ingestion.
+
+1️⃣7️⃣ Same file comes twice?
+System validates filename and metadata. If already processed → skipped.
+
+1️⃣8️⃣ Schema change validation?
+Validate schema in Lambda
+
+
+Use DynamicFrame for evolution
+
+
+If breaking change → job fails + alert triggered
+
+
+
+1️⃣9️⃣ Cluster config for 500–600MB?
+Used Glue G.1X workers with 2–5 workers.
+ Data size moderate, no heavy distributed cluster needed.
+
+2️⃣0️⃣ Why that cluster size?
+Cost optimization + workload manageable within SLA.
+
+2️⃣1️⃣ How do you optimize Glue jobs?
+Code Level:
+Partitioning
+
+
+Predicate pushdown
+
+
+Optimized joins
+
+
+Avoid collect()
+
+
+Hardware Level:
+Increase worker type
+
+
+Increase number of workers
+
+
+Adjust DPUs
+
+
+
+2️⃣2️⃣ Worker type used?
+G.1X for daily loads
+
+
+G.2X for heavy monthly loads
+
+
+
+2️⃣3️⃣ Maximum Concurrency?
+Defines how many job runs can execute in parallel.
+ Used for event-based pipelines when multiple files arrive simultaneously.
+
+🔹 Architecture / Design
+
+2️⃣4️⃣ Explain your architecture?
+Event-based + scheduled pipelines.
+ Data from S3, RDS, SFTP → Glue → S3 staging → Snowflake → Transformation → Data Sharing.
+
+2️⃣5️⃣ Event-based pipeline?
+S3 upload → Lambda → Glue → Snowflake.
+
+2️⃣6️⃣ Schedule-based pipeline?
+Glue Workflow runs at fixed time → Extract → Crawl → Ingest → Transform.
+
+2️⃣7️⃣ Incremental load?
+Load only new or updated data using watermark (timestamp column).
+
+2️⃣8️⃣ Truncate & load?
+Delete entire table and reload fresh data.
+
+2️⃣9️⃣ Data validation?
+Filename pattern check
+
+
+Schema validation
+
+
+Null checks
+
+
+Duplicate detection
+
+
+Business rule filtering
+
+
+
+3️⃣0️⃣ Challenges?
+Duplicate file handling
+
+
+Schema drift
+
+
+Large monthly load performance
+
+
+Skew in joins
+
+
+
+3️⃣1️⃣ Partitioning?
+Organizing data by date or key in S3 to improve query performance and reduce scan cost.
+
+🔹 SQL
+
+3️⃣2️⃣ Window Functions?
+Perform calculations across rows related to current row without grouping.
+Example:
+ ROW_NUMBER(), RANK(), DENSE_RANK()
+
+3️⃣3️⃣ RANK vs DENSE_RANK?
+RANK skips numbers after tie.
+ DENSE_RANK does not skip.
+
+3️⃣4️⃣ CTE?
+Common Table Expression. Temporary named result used inside query.
+
+3️⃣5️⃣ WHERE vs HAVING?
+WHERE filters before grouping.
+ HAVING filters after GROUP BY.
+
+3️⃣6️⃣ Remove duplicates?
+Use DISTINCT or ROW_NUMBER() with partition.
+
+3️⃣7️⃣ 2nd highest salary?
+Use DENSE_RANK or subquery with MAX().
+
+3️⃣8️⃣ Join types?
+INNER, LEFT, RIGHT, FULL OUTER.
+
+🔹 General
+
+3️⃣9️⃣ SQL vs NoSQL?
+SQL → Structured, fixed schema.
+ NoSQL → Flexible schema, scalable.
+
+4️⃣0️⃣ What happens when Spark job fails?
+Spark retries failed tasks. If repeated failures occur → job fails. Logs help debugging.
+
+4️⃣1️⃣ How Spark processes distributed?
+Data divided into partitions → tasks assigned to executors → processed in parallel.
+
+4️⃣2️⃣ What type of optimizations have you used?
+You should answer in 2 categories:
+
+✅ Code-Level Optimization
+In my project, I implemented:
+Partitioning data in S3 (year/month/day) to reduce scan cost.
+
+
+Predicate pushdown while reading from source.
+
+
+Used broadcast join for small dimension tables.
+
+
+Used repartition() before heavy joins to balance data.
+
+
+Avoided collect() and large driver-side operations.
+
+
+Used column pruning (selected only required columns).
+
+
+Used cache() only when necessary.
+
+
+Used COPY INTO for efficient Snowflake loading.
+
+
+You can say:
+I mainly focused on reducing shuffles, minimizing data scan, and optimizing joins.
+That sounds senior.
+
+✅ Hardware-Level Optimization
+Increased Glue worker type (G.1X → G.2X)
+
+
+Increased number of workers
+
+
+Tuned executor memory
+
+
+Enabled Snowflake auto-scaling warehouse
+
+
+Adjusted maximum concurrency for parallel processing
+
+
+You can conclude:
+I optimized both at code level and infrastructure level based on workload.
+
+4️⃣3️⃣What are Wide and Narrow Transformations?
+This is a very common Spark question.
+
+✅ Narrow Transformation
+A narrow transformation is when:
+Each output partition depends on only one input partition.
+
+
+No shuffle required.
+
+
+Examples:
+map()
+
+
+filter()
+
+
+select()
+
+
+withColumn()
+
+
+It is fast because there is no data movement across nodes.
+
+✅ Wide Transformation
+A wide transformation is when:
+Output partition depends on multiple input partitions.
+
+
+Requires shuffle.
+
+
+Data moves across executors.
+
+
+Examples:
+groupBy()
+
+
+join()
+
+
+distinct()
+
+
+repartition()
+
+
+It is expensive because it involves network shuffle.
+
+
+

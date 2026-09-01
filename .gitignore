@@ -1,0 +1,27 @@
+# Environment
+.env
+.venv/
+venv/
+__pycache__/
+
+# Data
+data/
+*.faiss
+*.pkl
+
+# IDE
+.idea/
+.vscode/
+.agents/
+*.swp
+
+# Build
+dist/
+build/
+*.egg-info/
+=0.0.9
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/

@@ -1,0 +1,70 @@
+%% Enterprise Knowledge Transfer Agent — system architecture (high level)
+%% Render: https://mermaid.live  OR  mmdc -i project_system_architecture.mmd -o project_system_architecture.png
+
+flowchart TB
+  subgraph Clients["Clients"]
+    C1["Streamlit tester\nui/streamlit_app.py"]
+    C2["HTTP clients\n(Postman / curl / apps)"]
+  end
+
+  subgraph API["API layer — FastAPI"]
+    M["knowledge_transfer_agent.api.main\n+ middleware"]
+    R1["/api/v1/health"]
+    R2["/api/v1/ingest"]
+    R3["/api/v1/ask + /api/v1/query"]
+    R4["/api/v1/feedback"]
+    SEC["Auth: get_current_user\n(API key / bearer)"]
+    RL["Rate limit: SlowAPI"]
+    M --> SEC
+    M --> RL
+    M --> R1
+    M --> R2
+    M --> R3
+    M --> R4
+  end
+
+  subgraph Core["Core runtime"]
+    SVC["AgentService\nknowledge_transfer_agent.services.agent_service"]
+    G["LangGraph graph\nknowledge_transfer_agent.agent.graph"]
+    N["Nodes: planner → tool_select → retrieve →\ngenerate → reflection → memory → confidence\nknowledge_transfer_agent.agent.nodes"]
+    RET["Retrieval\nHybridRetriever + FAISS\nretrieval/* + vector_store.py"]
+    EMB["Embeddings\nOpenAI (langchain-openai)"]
+    CACHE["Caches\nretrieve cache + LLM invoke_cached\n(core/cache.py)"]
+    SVC --> G --> N
+    N --> RET
+    RET --> EMB
+    N --> CACHE
+    RET --> CACHE
+  end
+
+  subgraph Ingest["Ingestion / indexing (offline or on-demand)"]
+    P["IngestionPipeline\ningestion/pipeline.py"]
+    CF["ConfluenceIngester\ningestion/confluence.py"]
+    GH["GitHubIngester\ningestion/github.py"]
+    FI["FileIngester\ningestion/file_ingester.py"]
+    DP["DocumentProcessor + chunking\ningestion/document_processor.py + chunking.py"]
+    VS["FAISS persist\nVECTOR_STORE_PATH\nretrieval/vector_store.py"]
+    P --> CF
+    P --> GH
+    P --> FI
+    CF --> DP
+    GH --> DP
+    FI --> DP
+    DP --> VS
+  end
+
+  subgraph Eval["Offline evaluation"]
+    RAGAS["scripts/run_ragas_eval.py\nRAGAS metrics"]
+  end
+
+  CFG["Config\nknowledge_transfer_agent.config.py\n(.env)"]
+
+  Clients --> API
+  API --> SVC
+  R2 --> P
+  VS --> RET
+  CFG -.-> API
+  CFG -.-> Core
+  CFG -.-> Ingest
+  SVC -.-> RAGAS
+  VS -.-> RAGAS

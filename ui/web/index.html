@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Enterprise Knowledge Transfer Agent — grounded answers with citations from your indexed documents." />
+  <meta name="theme-color" content="#0a0e17" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Knowledge Transfer Agent</title>
+  <link rel="icon" href="/app/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/app/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Sora:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/app/css/styles.css?v=22" />
+  <script>
+    (function () {
+      var t = localStorage.getItem("kta_theme");
+      if (!t && window.matchMedia("(prefers-color-scheme: light)").matches) t = "light";
+      document.documentElement.setAttribute("data-theme", t || "dark");
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", t === "light" ? "#e2e8f0" : "#0a0e17");
+    })();
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#questionInput">Skip to composer</a>
+  <div class="bg-mesh" aria-hidden="true">
+    <span class="orb orb-a"></span>
+    <span class="orb orb-b"></span>
+    <span class="orb orb-c"></span>
+  </div>
+  <div class="ask-progress hidden" id="askProgress" aria-hidden="true"></div>
+  <div id="apiBanner" class="api-banner hidden" role="alert"></div>
+  <div id="toastHost" class="toast-host" aria-live="polite" aria-relevant="additions"></div>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <path d="M16 4L4 10v12l12 6 12-6V10L16 4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <path d="M4 10l12 6 12-6M16 16v12" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title-row">
+            <h1>Knowledge Transfer</h1>
+            <span class="enterprise-badge" title="Internal enterprise assistant">Enterprise</span>
+          </div>
+          <p>Grounded RAG · citation-backed</p>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Main">
+        <section class="sidebar-card">
+          <div class="card-head">
+            <span class="section-label">Project</span>
+            <span class="index-badge index-badge--unknown" data-index-badge aria-live="polite">Checking…</span>
+          </div>
+          <select id="workspaceSelect" class="workspace-select" aria-label="Active project"></select>
+          <div class="workspace-actions">
+            <button type="button" class="btn-sidebar btn-sidebar--primary" id="btnNewWorkspace">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              New project
+            </button>
+            <details class="dropdown" id="projectMenu">
+              <summary class="btn-sidebar btn-sidebar--icon" aria-label="Project options">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+              </summary>
+              <div class="dropdown-panel" role="menu">
+                <button type="button" role="menuitem" id="btnIngest">Add documents</button>
+                <button type="button" role="menuitem" id="btnOpenLibrary">Knowledge library</button>
+                <button type="button" role="menuitem" id="btnClearIndex">Clear search index</button>
+                <hr />
+                <button type="button" role="menuitem" class="danger" id="btnDeleteWorkspace">Delete project</button>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="sidebar-card sidebar-card--chat">
+          <div class="card-head">
+            <span class="section-label">Conversations</span>
+            <button type="button" class="btn-icon-sm" id="btnNewChat" title="New conversation" aria-label="New conversation">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </div>
+          <ul class="conversation-list" id="conversationList" aria-label="Conversation history"></ul>
+          <p class="sidebar-empty hidden" id="conversationsEmpty">No conversations yet</p>
+          <button type="button" class="btn-sidebar-link hidden" id="btnManageHistory">Manage local history</button>
+        </section>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="status-pill" id="healthStatus">
+          <span class="status-dot"></span>
+          <span class="status-text">Connecting…</span>
+        </div>
+        <p class="sidebar-meta" id="sidebarMeta">
+          <span id="appVersionLabel">v—</span>
+          <span class="meta-sep" aria-hidden="true">·</span>
+          <span>Answers stay grounded to indexed sources</span>
+        </p>
+      </div>
+    </aside>
+
+    <main class="chat-main">
+      <header class="chat-header">
+        <button type="button" class="btn-icon mobile-only" id="btnToggleSidebar" aria-label="Open menu">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="header-title">
+          <div class="header-title-row">
+            <h2 id="headerProjectName">Knowledge base</h2>
+            <span class="index-badge index-badge--unknown header-badge" data-index-badge>Checking…</span>
+          </div>
+          <p id="headerSubtitle">Grounded answers with citations from your project documents</p>
+        </div>
+        <div class="header-actions">
+          <button type="button" class="btn-header-cta hidden" id="btnHeaderIngest">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            Add documents
+          </button>
+          <button type="button" class="btn-icon-header" id="btnLibrary" title="Knowledge library" aria-label="Knowledge library">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+          </button>
+          <button type="button" class="btn-icon-header" id="btnTheme" title="Toggle theme" aria-label="Toggle theme">
+            <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+            <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+          </button>
+          <button type="button" class="btn-icon-header" id="btnSettings" title="Settings" aria-label="Settings">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="messages-wrap" id="messagesWrap">
+        <div class="boot-skeleton" id="bootSkeleton" aria-hidden="true">
+          <div class="skel skel-line skel-lg"></div>
+          <div class="skel skel-line"></div>
+          <div class="skel skel-line skel-short"></div>
+          <div class="skel-cards">
+            <div class="skel skel-card"></div>
+            <div class="skel skel-card"></div>
+          </div>
+        </div>
+        <div class="welcome hidden" id="welcome">
+          <div class="welcome-card">
+            <div class="welcome-icon" aria-hidden="true">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <p class="welcome-kicker">Pure RAG · enterprise knowledge</p>
+            <h3>Ask your knowledge base</h3>
+            <p class="welcome-lead">Every answer is grounded in indexed project documents — with citations you can verify.</p>
+            <div class="trust-row" aria-label="Trust signals">
+              <span class="trust-chip">Citation-backed</span>
+              <span class="trust-chip">Source-grounded</span>
+              <span class="trust-chip">Project-scoped</span>
+            </div>
+            <button type="button" class="welcome-upload-btn" id="btnWelcomeUpload">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              Upload documents to chat
+            </button>
+            <div class="welcome-empty-index hidden" id="welcomeEmptyIndex">
+              <p class="welcome-empty-title">No documents indexed yet</p>
+              <p class="welcome-lead">Add a folder, files, or a Git repo so the agent can answer from your knowledge base.</p>
+              <button type="button" class="btn-primary welcome-cta" id="btnWelcomeIndex">Add documents</button>
+            </div>
+            <div class="welcome-prompts" id="welcomePromptsBlock">
+              <p class="welcome-prompts-label">Try asking</p>
+              <ul class="prompt-chips" id="welcomePromptChips"></ul>
+            </div>
+          </div>
+        </div>
+        <div class="messages" id="messages" role="log" aria-live="polite"></div>
+        <div class="followups hidden" id="followups">
+          <p class="followups-label">Suggested follow-ups</p>
+          <div class="followup-chips" id="followupChips"></div>
+        </div>
+      </div>
+
+      <form class="composer" id="composerForm">
+        <div class="composer-inner">
+          <button type="button" class="btn-composer-attach" id="btnChatUpload" title="Upload files for this conversation" aria-label="Upload files for this conversation">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+          </button>
+          <textarea
+            id="questionInput"
+            rows="1"
+            placeholder="Ask about architecture, deployment, or onboarding…"
+            maxlength="2000"
+            aria-label="Your question"
+          ></textarea>
+          <button type="submit" class="btn-send" id="btnSend" disabled aria-label="Send">
+            <svg class="icon-send" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            <svg class="icon-stop hidden" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+          </button>
+        </div>
+        <p class="composer-hint"><kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · answers cite indexed sources only</p>
+      </form>
+    </main>
+
+    <aside class="citations-panel hidden" id="citationsPanel">
+      <div class="citations-header">
+        <h3>Sources</h3>
+        <button type="button" class="btn-icon" id="btnCloseCitations" aria-label="Close sources">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="citations-list" id="citationsList"></div>
+    </aside>
+  </div>
+
+  <dialog class="settings-dialog ingest-dialog" id="ingestDialog">
+    <form class="settings-form ingest-form" id="ingestForm">
+      <header>
+        <h3 id="ingestDialogTitle">Add knowledge</h3>
+        <button type="button" class="btn-icon" id="btnCloseIngest" aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+
+      <div class="ingest-context" id="ingestContext" role="status">
+        <p class="ingest-context-line" id="ingestContextProject"></p>
+        <p class="ingest-context-line ingest-context-line--emph" id="ingestContextChat"></p>
+      </div>
+
+      <div class="ingest-tabs" role="tablist">
+        <button type="button" class="ingest-tab active" data-ingest-tab="folder" role="tab">Upload folder</button>
+        <button type="button" class="ingest-tab" data-ingest-tab="git" role="tab" id="tabGitClone">Git clone</button>
+        <button type="button" class="ingest-tab" data-ingest-tab="local" role="tab" id="tabLocalPath">Local path</button>
+      </div>
+
+      <div class="ingest-panel" id="ingestPanelFolder" data-ingest-panel="folder">
+        <p class="ingest-hint">Select your whole project folder — we skip <code>node_modules</code>, <code>.git</code>, <code>venv</code>, etc. Code + docs (.py, .js, .md, …) are indexed.</p>
+        <div class="ingest-actions-row">
+          <label class="btn-ingest-pick">
+            <input type="file" id="ingestFolder" webkitdirectory directory multiple hidden />
+            Choose project folder
+          </label>
+          <label class="btn-ingest-pick secondary">
+            <input type="file" id="ingestFiles" multiple hidden />
+            Pick files
+          </label>
+        </div>
+        <label class="file-drop hidden" id="fileDrop">
+          <input type="file" id="ingestFilesDrop" multiple hidden />
+        </label>
+        <p class="ingest-summary" id="ingestSummary">No files selected</p>
+        <ul class="file-list hidden" id="fileList"></ul>
+      </div>
+
+      <div class="ingest-panel hidden" id="ingestPanelGit" data-ingest-panel="git">
+        <p class="ingest-hint">Clone on the API server (needs <code>git</code> installed). Public repos work out of the box; for private GitHub repos set <code>GITHUB_TOKEN</code> in server <code>.env</code>.</p>
+        <label class="ingest-path-label">
+          <span>Repository URL</span>
+          <input type="url" id="gitCloneUrl" placeholder="https://github.com/org/repo.git" autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="ingest-path-label">
+          <span>Branch <small>(optional)</small></span>
+          <input type="text" id="gitCloneBranch" placeholder="main" autocomplete="off" />
+        </label>
+        <button type="button" class="btn-primary btn-block" id="btnGitClone">Clone &amp; index</button>
+      </div>
+
+      <div class="ingest-panel hidden" id="ingestPanelLocal" data-ingest-panel="local">
+        <p class="ingest-hint">Index a folder already on this machine (where the API runs). Best for large codebases — no browser upload.</p>
+        <label class="ingest-path-label">
+          <span>Folder path</span>
+          <input type="text" id="localIngestPath" placeholder="/home/you/projects/my-app" autocomplete="off" />
+        </label>
+        <button type="button" class="btn-primary btn-block" id="btnLocalIngest">Index this folder</button>
+      </div>
+
+      <label class="checkbox-row">
+        <input type="checkbox" id="replaceIndex" />
+        <span>Replace entire index (full rebuild)</span>
+      </label>
+      <div class="ingest-progress-panel hidden" id="ingestProgressPanel">
+        <div class="progress-block" id="uploadProgressBlock">
+          <div class="progress-head">
+            <span class="progress-label">Upload</span>
+            <span class="progress-pct" id="uploadPercent">0%</span>
+          </div>
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="progress-fill" id="uploadProgressFill" style="width: 0%"></div>
+          </div>
+          <p class="progress-detail" id="uploadProgressDetail">Preparing…</p>
+        </div>
+        <div class="progress-block hidden" id="indexProgressBlock">
+          <div class="progress-head">
+            <span class="progress-label">Indexing</span>
+            <span class="progress-pct" id="indexPercent">0%</span>
+          </div>
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="progress-fill progress-fill--index" id="indexProgressFill" style="width: 0%"></div>
+          </div>
+          <p class="progress-detail" id="indexProgressDetail">Waiting to start…</p>
+        </div>
+      </div>
+      <div class="ingest-status hidden" id="ingestStatus"></div>
+      <footer class="ingest-footer">
+        <button type="button" class="btn-ghost-footer" id="btnCancelIngest">Cancel</button>
+        <button type="submit" class="btn-primary" id="btnSubmitIngest" disabled>Start indexing</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="settings-dialog history-dialog" id="historyDialog">
+    <div class="settings-form history-form">
+      <header>
+        <h3>Local chat history</h3>
+        <button type="button" class="btn-icon" id="btnCloseHistory" aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+
+      <section class="history-section history-section--messages">
+        <h4 id="historyCurrentProjectTitle">This project</h4>
+        <p class="ingest-hint">Browser-stored messages when server threads are unavailable.</p>
+        <div class="history-toolbar">
+          <button type="button" class="btn-ghost-footer btn-sm" id="histMsgSelectAll">Select all</button>
+          <button type="button" class="btn-ghost-footer btn-sm" id="histMsgSelectNone">Select none</button>
+          <button type="button" class="btn-ghost-footer btn-sm btn-danger-text" id="histMsgDeleteSelected">Delete selected</button>
+          <button type="button" class="btn-ghost-footer btn-sm btn-danger-text" id="histMsgClearAll">Clear all</button>
+        </div>
+        <ul class="history-list" id="historyMsgList"></ul>
+        <p class="history-empty hidden" id="historyMsgEmpty">No messages saved for this project.</p>
+      </section>
+
+      <section class="history-section">
+        <h4>All projects</h4>
+        <p class="ingest-hint">Clear stored chat for multiple projects at once.</p>
+        <div class="history-toolbar">
+          <button type="button" class="btn-ghost-footer btn-sm" id="histProjSelectAll">Select all</button>
+          <button type="button" class="btn-ghost-footer btn-sm" id="histProjSelectNone">Select none</button>
+          <button type="button" class="btn-ghost-footer btn-sm btn-danger-text" id="histProjDeleteSelected">Clear selected</button>
+        </div>
+        <ul class="history-list history-list--projects" id="historyProjectList"></ul>
+      </section>
+
+      <footer class="ingest-footer">
+        <button type="button" class="btn-primary" id="btnCloseHistoryDone">Done</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <dialog class="settings-dialog library-dialog" id="libraryDialog">
+    <div class="settings-form library-form">
+      <header>
+        <div>
+          <h3>Knowledge library</h3>
+          <p class="library-sub" id="librarySubtitle">Indexed sources, audit, and shared memory</p>
+        </div>
+        <button type="button" class="btn-icon" id="btnCloseLibrary" aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+
+      <div class="library-tabs" role="tablist">
+        <button type="button" class="library-tab active" data-library-tab="docs" role="tab" aria-selected="true">Documents</button>
+        <button type="button" class="library-tab" data-library-tab="audit" role="tab" aria-selected="false">Audit</button>
+        <button type="button" class="library-tab" data-library-tab="memory" role="tab" aria-selected="false">Memory</button>
+      </div>
+
+      <div class="library-panel" id="libraryPanelDocs" data-library-panel="docs">
+        <div class="library-stats" id="libraryDocStats">Loading index…</div>
+        <div class="library-toolbar">
+          <input type="search" id="libraryDocSearch" placeholder="Filter by file name…" aria-label="Filter documents" />
+          <button type="button" class="btn-ghost-footer btn-sm" id="btnRefreshDocs">Refresh</button>
+        </div>
+        <ul class="library-list" id="libraryDocList"></ul>
+        <p class="library-empty hidden" id="libraryDocEmpty">No indexed documents in this project.</p>
+      </div>
+
+      <div class="library-panel hidden" id="libraryPanelAudit" data-library-panel="audit">
+        <div class="library-toolbar">
+          <p class="library-hint">Recent Q&amp;A with confidence, citations, and latency.</p>
+          <button type="button" class="btn-ghost-footer btn-sm" id="btnRefreshAudit">Refresh</button>
+        </div>
+        <ul class="library-list" id="libraryAuditList"></ul>
+        <p class="library-empty hidden" id="libraryAuditEmpty">No audit entries yet — ask a question first.</p>
+      </div>
+
+      <div class="library-panel hidden" id="libraryPanelMemory" data-library-panel="memory">
+        <div class="library-toolbar">
+          <p class="library-hint">Long-term shared memories for this project.</p>
+          <button type="button" class="btn-ghost-footer btn-sm btn-danger-text" id="btnClearMemory">Clear all</button>
+          <button type="button" class="btn-ghost-footer btn-sm" id="btnRefreshMemory">Refresh</button>
+        </div>
+        <ul class="library-list" id="libraryMemoryList"></ul>
+        <p class="library-empty hidden" id="libraryMemoryEmpty">No shared memories stored.</p>
+      </div>
+
+      <footer class="ingest-footer">
+        <button type="button" class="btn-primary" id="btnCloseLibraryDone">Done</button>
+      </footer>
+    </div>
+  </dialog>
+
+  <dialog class="settings-dialog" id="settingsDialog">
+    <form method="dialog" class="settings-form" id="settingsForm">
+      <header>
+        <h3>Settings</h3>
+        <button type="button" class="btn-icon" id="btnCloseSettings" aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </header>
+
+      <section class="settings-section">
+        <h4 class="settings-section-title">Preferences</h4>
+        <label class="checkbox-row settings-row">
+          <input type="checkbox" id="streamMode" checked />
+          <span>Stream responses (recommended)</span>
+        </label>
+      </section>
+
+      <section class="settings-section">
+        <h4 class="settings-section-title">Security</h4>
+        <label>
+          <span>API key <small>(optional · used when RBAC is enabled)</small></span>
+          <input type="password" id="apiKey" placeholder="X-API-Key" autocomplete="off" />
+        </label>
+      </section>
+
+      <details class="settings-advanced" id="settingsAdvanced">
+        <summary>Advanced connection</summary>
+        <p class="settings-hint">Usually auto-detected from this page’s origin. Change only if the API runs on a different host.</p>
+        <label>
+          <span>API base URL</span>
+          <input type="url" id="apiBaseUrl" placeholder="http://127.0.0.1:8000" />
+        </label>
+        <p class="settings-conn" id="settingsConnStatus">Checking connection…</p>
+      </details>
+
+      <section class="settings-about">
+        <h4 class="settings-section-title">About</h4>
+        <dl class="about-grid">
+          <div><dt>Product</dt><dd>Knowledge Transfer Agent</dd></div>
+          <div><dt>Version</dt><dd id="aboutVersion">—</dd></div>
+          <div><dt>Endpoint</dt><dd class="mono" id="aboutEndpoint">—</dd></div>
+        </dl>
+      </section>
+
+      <footer>
+        <button type="submit" class="btn-primary">Save</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="settings-dialog confirm-dialog" id="confirmDialog" aria-labelledby="confirmTitle">
+    <form method="dialog" class="settings-form confirm-form" id="confirmForm">
+      <header>
+        <h3 id="confirmTitle">Confirm</h3>
+      </header>
+      <p class="confirm-message" id="confirmMessage"></p>
+      <footer class="ingest-footer">
+        <button type="button" class="btn-ghost-footer" id="confirmCancel" value="cancel">Cancel</button>
+        <button type="submit" class="btn-primary" id="confirmOk" value="ok">Confirm</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="/app/js/app.js?v=22"></script>
+</body>
+</html>

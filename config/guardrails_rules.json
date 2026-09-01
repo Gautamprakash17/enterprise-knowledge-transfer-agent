@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "description": "External guardrail policy pack. Update without changing application code. Restart or call policy reload to pick up changes.",
+  "prompt_injection_patterns": [
+    {
+      "id": "ignore_previous_instructions",
+      "pattern": "ignore\\s+(all\\s+)?(previous|prior|above)\\s+instructions"
+    },
+    {
+      "id": "disregard_previous_instructions",
+      "pattern": "disregard\\s+(all\\s+)?(previous|prior|above)\\s+(instructions|rules)"
+    },
+    {
+      "id": "forget_instructions",
+      "pattern": "forget\\s+(everything|all)\\s+(you|your)\\s+(know|instructions|rules)"
+    },
+    {
+      "id": "jailbreak_persona",
+      "pattern": "you\\s+are\\s+now\\s+(dan|jailbroken|unrestricted)"
+    },
+    {
+      "id": "override_system_policy",
+      "pattern": "override\\s+(your|the)\\s+(system|safety)\\s+(prompt|rules|policy)"
+    },
+    {
+      "id": "reveal_system_prompt",
+      "pattern": "reveal\\s+(your|the)\\s+(system\\s+)?prompt"
+    },
+    {
+      "id": "print_system_prompt",
+      "pattern": "print\\s+(your|the)\\s+(system\\s+)?prompt"
+    },
+    {
+      "id": "system_tag",
+      "pattern": "<\\s*/?\\s*system\\s*>"
+    },
+    {
+      "id": "inst_tag",
+      "pattern": "\\[\\s*INST\\s*\\]"
+    },
+    {
+      "id": "do_anything_now",
+      "pattern": "do\\s+anything\\s+now"
+    }
+  ],
+  "blocked_keywords": [
+    "exfiltrate",
+    "ransomware",
+    "dump all passwords",
+    "steal credentials",
+    "credit card dump"
+  ],
+  "pii_patterns": [
+    {
+      "id": "api_key",
+      "pattern": "\\b(?:sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\\b",
+      "replacement": "[REDACTED_SECRET]",
+      "flag": "secret_api_key"
+    },
+    {
+      "id": "email",
+      "pattern": "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b",
+      "replacement": "[REDACTED_EMAIL]",
+      "flag": "pii_email"
+    },
+    {
+      "id": "ssn",
+      "pattern": "\\b\\d{3}-\\d{2}-\\d{4}\\b",
+      "replacement": "[REDACTED_SSN]",
+      "flag": "pii_ssn"
+    },
+    {
+      "id": "credit_card",
+      "pattern": "\\b(?:\\d[ -]*?){13,19}\\b",
+      "replacement": "[REDACTED_CARD]",
+      "flag": "pii_credit_card",
+      "validator": "luhn"
+    },
+    {
+      "id": "phone",
+      "pattern": "(?<!\\d)(?:\\+?\\d{1,3}[\\s\\-.]?)?(?:\\(?\\d{3}\\)?[\\s\\-.]?)\\d{3}[\\s\\-.]?\\d{4}(?!\\d)",
+      "replacement": "[REDACTED_PHONE]",
+      "flag": "pii_phone"
+    }
+  ]
+}
