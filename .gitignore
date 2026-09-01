@@ -13,6 +13,7 @@ data/
 .idea/
 .vscode/
 .agents/
+.cursor/
 *.swp
 
 # Build
