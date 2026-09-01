@@ -47,7 +47,7 @@ flowchart TD
 
 ## Flowchart Image
 
-![Agent Flowchart](docs/Generated_image.png)
+![Agent Flowchart](Generated_image.png)
 
 ## Detailed flow (Mermaid)
 

@@ -1,177 +1,293 @@
 # Enterprise Knowledge Transfer Agent
 
-AI-powered RAG system for internal architecture, data pipelines, and deployment workflows. Built with LangGraph, LangChain, FAISS, and FastAPI.
+AI-powered RAG system for internal onboarding and knowledge transfer. Ingests documents and code, builds a per-project FAISS index, and answers questions with **citation-backed** responses via a **LangGraph multi-agent** pipeline.
 
-## Features
-
-- **RAG workflow**: Retrieve → Generate → Reflection → Confidence
-- **Hybrid retrieval**: Semantic (FAISS) + keyword/MMR search
-- **Citation enforcement**: Traceable, citation-backed responses
-- **Reflection & confidence**: Hallucination validation, confidence scoring
-- **Ingestion**: TXT, PDF; Confluence, GitHub, local files
-- **Production-ready**: Logging middleware, env config, Docker, RBAC
+**Stack:** LangGraph · LangChain · FAISS · FastAPI · vanilla web UI
 
 ---
 
-## Run Instructions
+## Features
+
+| Area | What you get |
+|------|----------------|
+| **RAG** | Retrieve → generate → reflection → confidence scoring |
+| **Multi-agent** | Supervisor, retriever, writer, critic, guardrails, shared memory |
+| **Retrieval** | Hybrid semantic + MMR keyword search; optional reranking |
+| **Citations** | Answers cite retrieved chunks `[N]`; sources panel in the UI |
+| **Ingestion** | PDF, TXT, Markdown, code files; folder upload; Git clone; Confluence |
+| **Projects** | Workspace-scoped indexes — Project A never mixes with Project B |
+| **UI** | ChatGPT-style web app: projects, conversations, upload, document library |
+| **Production** | Rate limiting, retries, caching, audit log, Prometheus metrics, RBAC |
+
+---
+
+## Quick start
 
 ### Prerequisites
 
 - Python 3.11+
 - OpenAI API key
+- `git` (optional, for Git clone ingest)
 
-### 1. Local Setup
+### 1. Install
 
 ```bash
-# Clone and enter project
-cd LanGraph
+git clone https://github.com/Gautamprakash17/enterprise-knowledge-transfer-agent.git
+cd enterprise-knowledge-transfer-agent
 
-# Create virtual environment
 python -m venv .venv
-source .venv/bin/activate   # Linux/macOS
-# .venv\Scripts\activate    # Windows
+source .venv/bin/activate          # Linux/macOS
+# .venv\Scripts\activate           # Windows
 
-# Install
 pip install -e .
-
-# Configure
 cp .env.example .env
 # Edit .env and set OPENAI_API_KEY
 ```
 
-### 2. Ingest Documents
+### 2. Start the API + web UI
 
 ```bash
-# Ingest TXT/PDF from paths
-python scripts/ingest.py ./docs ./runbooks
+uvicorn knowledge_transfer_agent.api.main:app --reload --host 127.0.0.1 --port 8000
+```
 
-# Add to existing index
+Or use the helper script:
+
+```bash
+./scripts/run_ui.sh
+```
+
+| URL | Purpose |
+|-----|---------|
+| http://localhost:8000/app/ | **Web UI** (chat, upload, citations) |
+| http://localhost:8000/docs | OpenAPI / Swagger |
+| http://localhost:8000/api/v1/health | Health + index status |
+
+> If port `8000` is busy, use another port: `uvicorn ... --port 8002` and open `http://localhost:8002/app/`.
+
+### 3. Add documents
+
+**Option A — Web UI (recommended)**
+
+1. Open http://localhost:8000/app/
+2. Select or create a **project**
+3. Click **Add documents** or **Upload documents to chat**
+4. Wait for indexing to finish (progress bar in the upload dialog)
+5. Ask a question — answers include `[1]`, `[2]` citation chips
+
+**Option B — CLI**
+
+```bash
+# Index files or folders into the default project
+python scripts/ingest.py ./docs
+
+# Add to existing index (incremental)
 python scripts/ingest.py ./new_docs --add
 
-# Full pipeline (Confluence, GitHub, files)
+# Full pipeline: Confluence + GitHub (from .env) + local paths
 python scripts/ingest.py ./docs --full-pipeline
 ```
 
-**Git / GitHub:** In `.env`, set `GITHUB_REPOS` to comma-separated **local repo paths** and/or **remote Git URLs** (for example `https://github.com/org/repo.git`). Remote URLs are **cloned or pulled** into `GITHUB_CLONE_CACHE_DIR` (default `./data/git_clones`), then text files are indexed. Requires **`git` installed**. For private **GitHub** HTTPS repos, set `GITHUB_TOKEN`.
-
-**Confluence:** Uses the **Confluence REST API** (install `atlassian-python-api`). Set `CONFLUENCE_URL`, `CONFLUENCE_TOKEN`, and `CONFLUENCE_SPACE_KEYS`. All pages in each space are fetched with **pagination** (not only the first 100). If token-only auth fails on Cloud, set `CONFLUENCE_USERNAME` to your Atlassian email. HTML `body.storage` is converted to plain text with BeautifulSoup.
-
-### 3. Run API
-
-```bash
-uvicorn knowledge_transfer_agent.api.main:app --reload
-```
-
-API: http://localhost:8000  
-Docs: http://localhost:8000/docs  
-Web UI: http://localhost:8000/app/
-
-### 4. Docker
-
-```bash
-# Build
-docker build -t knowledge-agent .
-
-# Run (mount data volume for FAISS index)
-docker run -p 8000:8000 \
-  -e OPENAI_API_KEY=sk-your-key \
-  -v $(pwd)/data:/app/data \
-  knowledge-agent
-```
-
-Or with docker-compose:
-
-```bash
-# Set OPENAI_API_KEY in .env first
-docker-compose up --build
-```
-
----
-
-## API Examples
-
-### POST /api/v1/ask
+### 4. Ask a question (API)
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "How do we deploy the data pipeline?"}'
+  -H "X-Workspace-Id: default" \
+  -d '{"question": "How does the RAG pipeline work in this project?"}'
 ```
 
-Response:
+Example response:
 
 ```json
 {
-  "answer": "...",
+  "answer": "The pipeline loads documents, chunks them, embeds into FAISS, then retrieves context at query time [1].",
   "citations": [
-    {"source": "/path/to/doc", "source_type": "file", "doc_id": "..."}
+    {
+      "source": "/path/to/doc.md",
+      "source_type": "file",
+      "snippet": "...",
+      "doc_id": "file:abc123"
+    }
   ],
   "reflection_status": "Validation passed",
   "confidence_score": 0.9
 }
 ```
 
-### POST /api/v1/query
+---
+
+## Web UI overview
+
+The UI at `/app/` is a single-page app (HTML/CSS/JS) served by FastAPI.
+
+- **Projects** — isolated knowledge bases with separate FAISS indexes
+- **Conversations** — ChatGPT-style threads; lazy-created on first message or upload
+- **Upload** — attach files to the current chat or add docs to the whole project
+- **Citations panel** — click `[N]` in an answer to jump to the source chunk
+- **Knowledge library** — indexed documents, audit trail, shared memory
+- **Themes** — dark / light mode
+
+---
+
+## Vector store (where embeddings live)
+
+Embeddings are **not** stored in SQLite. They persist as FAISS artifacts on disk:
+
+| File | Contents |
+|------|----------|
+| `index.faiss` | Embedding vectors + index structure |
+| `index.pkl` | Chunk text and metadata mapping |
+| `ingestion_manifest.json` | Change detection for incremental re-index |
+
+**Paths:**
+
+- Default project (legacy): `./data/faiss_index/`
+- Named projects: `./data/workspaces/{project-id}/faiss_index/`
+
+After ingest, verify in the UI (**Knowledge library → Documents**) or:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What is our database architecture?"}'
-```
-
-### GET /api/v1/health
-
-```bash
-curl http://localhost:8000/api/v1/health
+curl -H "X-Workspace-Id: default" http://localhost:8000/api/v1/documents
 ```
 
 ---
 
-## Environment Variables
+## Ingestion sources
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `OPENAI_API_KEY` | Yes | - | OpenAI API key |
-| `VECTOR_STORE_PATH` | No | `./data/faiss_index` | FAISS index directory |
-| `API_HOST` | No | `0.0.0.0` | Bind address |
-| `API_PORT` | No | `8000` | Server port |
-| `ENABLE_RBAC` | No | `false` | Require API key for routes |
-| `SECRET_KEY` | No | - | API key when RBAC enabled |
+| Source | How |
+|--------|-----|
+| **Files / folders** | Web UI upload or `scripts/ingest.py` |
+| **Code repos** | Web UI → Git clone tab, or set `GITHUB_REPOS` in `.env` |
+| **Confluence** | Set `CONFLUENCE_URL`, `CONFLUENCE_TOKEN`, `CONFLUENCE_SPACE_KEYS` in `.env` |
 
-See `.env.example` for the full list.
+**Git / GitHub:** `GITHUB_REPOS` accepts local paths and remote URLs (`https://github.com/org/repo.git`). Remote repos are cloned into `GITHUB_CLONE_CACHE_DIR` (default `./data/git_clones`). Set `GITHUB_TOKEN` for private repos.
+
+**Confluence:** Uses the REST API (`atlassian-python-api`). Pages are fetched with pagination. HTML `body.storage` is converted to plain text.
 
 ---
 
-## Project Structure
+## API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/health` | Health check; `vector_store_loaded` per workspace |
+| GET | `/api/v1/meta` | Feature flags and API version |
+| POST | `/api/v1/ask` | Ask question (answer, citations, reflection, confidence) |
+| POST | `/api/v1/ask/stream` | Streaming answer (SSE) |
+| POST | `/api/v1/query` | Query with thread support |
+| POST | `/api/v1/ingest` | Trigger ingestion on server paths |
+| POST | `/api/v1/ingest/upload` | Upload files (async job) |
+| GET | `/api/v1/ingest/jobs/{id}` | Poll ingest job status |
+| GET | `/api/v1/documents` | List indexed sources + chunk counts |
+| GET | `/api/v1/workspaces` | List projects |
+| POST | `/api/v1/workspaces` | Create project |
+| GET | `/api/v1/chats` | List conversation threads |
+| POST | `/api/v1/chats` | Create thread |
+| GET | `/metrics` | Prometheus metrics |
+
+Pass the active project via header: `X-Workspace-Id: default`
+
+---
+
+## Docker
+
+```bash
+docker build -t knowledge-agent .
+
+docker run -p 8000:8000 \
+  -e OPENAI_API_KEY=sk-your-key \
+  -v $(pwd)/data:/app/data \
+  knowledge-agent
+```
+
+Or:
+
+```bash
+docker-compose up --build
+```
+
+---
+
+## Project structure
 
 ```
-LanGraph/
+enterprise-knowledge-transfer-agent/
 ├── src/knowledge_transfer_agent/
-│   ├── config.py
+│   ├── agent/              # LangGraph graph + multi-agent nodes
+│   ├── api/                # FastAPI routes, middleware, schemas
+│   ├── core/               # Workspaces, database, guardrails, cache
 │   ├── ingestion/          # Loaders, chunking, embedding pipeline
-│   ├── retrieval/          # FAISS, hybrid retriever
-│   ├── agent/              # LangGraph nodes, prompts, graph
-│   └── api/                # FastAPI, routes, middleware
-├── scripts/ingest.py       # CLI ingestion
-├── ui/web/                 # Web UI (HTML/CSS/JS, served at /app/)
-├── docs/                   # Sample docs
-├── requirements.txt
+│   ├── retrieval/          # FAISS, hybrid retriever, reranker
+│   └── services/           # Agent service, ingest jobs, follow-ups
+├── ui/web/                 # Web UI (HTML/CSS/JS → /app/)
+├── scripts/                # CLI ingest, RAGAS eval, run helpers
+├── tests/
+├── docs/                   # Interview guide, architecture diagrams
+├── data/                   # FAISS indexes, uploads (gitignored)
 ├── Dockerfile
 ├── docker-compose.yml
+├── pyproject.toml
 └── .env.example
 ```
 
 ---
 
-## API Endpoints
+## Configuration
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/v1/health` | Health check |
-| POST | `/api/v1/ask` | Ask question (answer, citations, reflection, confidence) |
-| POST | `/api/v1/query` | Query with thread support |
-| POST | `/api/v1/feedback` | Submit feedback |
-| POST | `/api/v1/ingest` | Trigger ingestion |
+Key environment variables (see `.env.example` for the full list):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENAI_API_KEY` | — | **Required** — OpenAI API key |
+| `OPENAI_MODEL` | `gpt-4o` | Chat model |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model |
+| `VECTOR_STORE_PATH` | `./data/faiss_index` | Default FAISS directory |
+| `CHUNK_SIZE` | `1000` | Chunk size in **characters** |
+| `CHUNK_OVERLAP` | `200` | Overlap in characters |
+| `TOP_K_SEMANTIC` | `6` | Semantic retrieval count |
+| `TOP_K_KEYWORD` | `2` | MMR keyword retrieval count |
+| `ENABLE_RBAC` | `false` | Require API key on routes |
+| `SECRET_KEY` | — | API key when RBAC is enabled |
+
+---
+
+## Architecture
+
+```
+User → Web UI (/app/) → FastAPI → AgentService → LangGraph
+                                              ↓
+                         Guardrails → Shared Memory → Supervisor
+                                              ↓
+                              Retriever → Writer → Critic → Confidence
+                                              ↓
+                                         FAISS (per project)
+```
+
+Detailed diagrams and interview talking points: [`docs/interview_guide.md`](docs/interview_guide.md)
+
+---
+
+## Development
+
+```bash
+# Run tests
+pytest
+
+# Lint
+ruff check src tests
+```
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| **“No index” / empty answers** | Upload docs to the **active project**; check sidebar shows **Indexed** |
+| **Upload done but no new chunks** | Same file re-upload may skip (incremental manifest) — tick **Replace index** |
+| **Wrong project answers** | Confirm `X-Workspace-Id` / sidebar project matches where you uploaded |
+| **Port in use** | Start on another port: `--port 8002` |
+| **API key errors** | Set `OPENAI_API_KEY` in `.env` and restart the server |
 
 ---
 
